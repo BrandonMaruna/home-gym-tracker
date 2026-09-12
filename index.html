@@ -1,0 +1,1713 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>IronLog - Home Gym Training Log</title>
+  
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              50: '#f0fdf4',
+              100: '#dcfce7',
+              500: '#22c55e',
+              600: '#16a34a',
+              700: '#15803d',
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- React 18, ReactDOM 18, Babel -->
+  <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+  <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #090d16;
+      color: #f1f5f9;
+      -webkit-tap-highlight-color: transparent;
+      user-select: none;
+    }
+    input, textarea, select {
+      user-select: text;
+    }
+    .no-scrollbar::-webkit-scrollbar {
+      display: none;
+    }
+    .no-scrollbar {
+      -ms-overflow-style: none;
+      scrollbar-width: none;
+    }
+  </style>
+</head>
+<body class="bg-slate-950 text-slate-100 min-h-screen flex flex-col antialiased">
+  <div id="root" class="flex-1 flex flex-col"></div>
+
+  <script type="text/babel">
+    const { useState, useEffect, useMemo } = React;
+
+    // --- SEED DATA & CONSTANTS ---
+    const DEFAULT_EXERCISES = [
+      { id: 'ex_sbs', name: 'Safety Bar Squat', category: 'Legs', equipment: 'Safety Squat Bar' },
+      { id: 'ex_bbb', name: 'Barbell Bench Press', category: 'Chest', equipment: 'Barbell & Bench' },
+      { id: 'ex_scle', name: 'Standing Cable Leg Extension', category: 'Legs', equipment: 'Cable Functional Trainer' },
+      { id: 'ex_cf', name: 'Cable Fly', category: 'Chest', equipment: 'Cable Functional Trainer' },
+      { id: 'ex_lp', name: 'Lat Pulldown', category: 'Back', equipment: 'Lat Pulldown' },
+      { id: 'ex_scr', name: 'Seated Cable Row', category: 'Back', equipment: 'Seated Cable Row' },
+      { id: 'ex_bcc', name: 'Bayesian Cable Curl', category: 'Biceps', equipment: 'Cable Functional Trainer' },
+      { id: 'ex_ezbc', name: 'EZ-Bar Cable Curl', category: 'Biceps', equipment: 'Cable Functional Trainer' },
+      { id: 'ex_gm', name: 'Good Morning', category: 'Posterior', equipment: 'Barbell' },
+      { id: 'ex_sclc', name: 'Standing Cable Leg Curl', category: 'Posterior', equipment: 'Cable Functional Trainer' },
+      { id: 'ex_ohp', name: 'Barbell Overhead Press', category: 'Delts', equipment: 'Barbell' },
+      { id: 'ex_clr', name: 'Cable Lateral Raise', category: 'Delts', equipment: 'Cable Functional Trainer' },
+      { id: 'ex_ibp', name: 'Incline Barbell/Swiss Bar Press', category: 'Chest', equipment: 'Swiss Bar & Bench' },
+      { id: 'ex_cplf', name: 'Cable Press / Low-to-High Fly', category: 'Chest', equipment: 'Cable Functional Trainer' },
+      { id: 'ex_ort', name: 'Overhead Rope Triceps Extension', category: 'Triceps', equipment: 'Cable Functional Trainer' },
+      { id: 'ex_rp', name: 'Rope Pushdown', category: 'Triceps', equipment: 'Cable Functional Trainer' },
+      { id: 'ex_cbs', name: 'Cable Belt Squat', category: 'Legs', equipment: 'Cable Functional Trainer' },
+      { id: 'ex_dl', name: 'Conventional Deadlift', category: 'Posterior', equipment: 'Barbell' },
+      { id: 'ex_rn', name: 'Cable-Assisted Reverse Nordic', category: 'Legs', equipment: 'Cable Functional Trainer' },
+      { id: 'ex_lc', name: 'Leg Curl', category: 'Posterior', equipment: 'Seated Leg Curl' },
+      { id: 'ex_scr_calf', name: 'Standing Calf Raise', category: 'Calves', equipment: 'Calf Block & Cable' },
+      { id: 'ex_nmlp', name: 'Neutral/Medium-Grip Lat Pulldown', category: 'Back', equipment: 'Lat Pulldown' },
+      { id: 'ex_wpcr', name: 'Wide/Pronated Cable Row', category: 'Back', equipment: 'Seated Cable Row' },
+      { id: 'ex_crf', name: 'Cable Reverse Fly', category: 'Delts', equipment: 'Cable Functional Trainer' },
+      { id: 'ex_saoct', name: 'Single-Arm Overhead Cable Triceps Extension', category: 'Triceps', equipment: 'Cable Functional Trainer' }
+    ];
+
+    const WEEK_MODIFIERS = {
+      1: { rir: '4 RIR', volumeMod: -1, description: 'Intro Week - ~4 RIR, reduced set volume' },
+      2: { rir: '3 RIR', volumeMod: -1, description: 'Ramp Up - ~3 RIR, reduced set volume' },
+      3: { rir: '2–3 RIR', volumeMod: 0, description: 'Full Volume - 2–3 RIR' },
+      4: { rir: '2 RIR', volumeMod: 0, description: 'Overload Peak - ~2 RIR' },
+      5: { rir: '1–2 RIR', volumeMod: 0, description: 'Intensity Peak - 1–2 RIR' },
+      6: { rir: '1–2 RIR', volumeMod: 0, description: 'Max Effort / Deload - 1–2 RIR' }
+    };
+
+    const DEFAULT_PROGRAM = {
+      id: 'prog_6day_homegym',
+      name: '6-Day Home Gym Hypertrophy',
+      description: 'Custom 6-day split optimized for Home Gym equipment (SSB, Swiss Bar, Cable, Bench).',
+      weeksCount: 6,
+      days: [
+        {
+          id: 'day_mon',
+          name: 'MONDAY — QUADS + CHEST',
+          shortName: 'Mon: Quads + Chest',
+          exercises: [
+            { exerciseId: 'ex_sbs', defaultSets: 3, minReps: 6, maxReps: 10, targetRir: 2, notes: 'Stay upright, drive off heel' },
+            { exerciseId: 'ex_bbb', defaultSets: 3, minReps: 6, maxReps: 10, targetRir: 2, notes: 'Touch mid-sternum' },
+            { exerciseId: 'ex_scle', defaultSets: 2, minReps: 12, maxReps: 20, targetRir: 2, notes: 'Per leg' },
+            { exerciseId: 'ex_cf', defaultSets: 2, minReps: 10, maxReps: 15, targetRir: 2, notes: 'Squeeze at center' }
+          ]
+        },
+        {
+          id: 'day_tue',
+          name: 'TUESDAY — BACK + BICEPS',
+          shortName: 'Tue: Back + Biceps',
+          exercises: [
+            { exerciseId: 'ex_lp', defaultSets: 3, minReps: 6, maxReps: 10, targetRir: 2, notes: 'Pull to upper chest' },
+            { exerciseId: 'ex_scr', defaultSets: 3, minReps: 8, maxReps: 12, targetRir: 2, notes: 'Drive elbows back' },
+            { exerciseId: 'ex_bcc', defaultSets: 2, minReps: 10, maxReps: 15, targetRir: 2, notes: 'Step forward for stretch' },
+            { exerciseId: 'ex_ezbc', defaultSets: 2, minReps: 8, maxReps: 12, targetRir: 2, notes: 'Strict form, no momentum' }
+          ]
+        },
+        {
+          id: 'day_wed',
+          name: 'WEDNESDAY — POSTERIOR + DELTS',
+          shortName: 'Wed: Posterior + Delts',
+          exercises: [
+            { exerciseId: 'ex_gm', defaultSets: 3, minReps: 6, maxReps: 10, targetRir: 2, notes: 'Hinge hips back' },
+            { exerciseId: 'ex_sclc', defaultSets: 3, minReps: 10, maxReps: 15, targetRir: 2, notes: 'Per leg' },
+            { exerciseId: 'ex_ohp', defaultSets: 2, minReps: 6, maxReps: 10, targetRir: 2, notes: 'Brace core tight' },
+            { exerciseId: 'ex_clr', defaultSets: 2, minReps: 12, maxReps: 20, targetRir: 2, notes: 'Per side' }
+          ]
+        },
+        {
+          id: 'day_thu',
+          name: 'THURSDAY — CHEST + ARMS',
+          shortName: 'Thu: Chest + Arms',
+          exercises: [
+            { exerciseId: 'ex_ibp', defaultSets: 3, minReps: 8, maxReps: 12, targetRir: 2, notes: 'Swiss Bar neutral grip or Incline' },
+            { exerciseId: 'ex_cplf', defaultSets: 2, minReps: 10, maxReps: 15, targetRir: 2, notes: 'Low to high trajectory' },
+            { exerciseId: 'ex_ort', defaultSets: 3, minReps: 10, maxReps: 15, targetRir: 2, notes: 'Full extension behind head' },
+            { exerciseId: 'ex_ezbc', defaultSets: 2, minReps: 10, maxReps: 15, targetRir: 2, notes: 'Constant cable tension' },
+            { exerciseId: 'ex_rp', defaultSets: 2, minReps: 10, maxReps: 15, targetRir: 2, notes: 'Spread rope at bottom' }
+          ]
+        },
+        {
+          id: 'day_fri',
+          name: 'FRIDAY — LEGS',
+          shortName: 'Fri: Legs',
+          exercises: [
+            { exerciseId: 'ex_cbs', defaultSets: 3, minReps: 10, maxReps: 15, targetRir: 2, notes: 'Deep knee flexion' },
+            { exerciseId: 'ex_dl', defaultSets: 2, minReps: 4, maxReps: 6, targetRir: 2, notes: 'Pull slack before lift' },
+            { exerciseId: 'ex_rn', defaultSets: 2, minReps: 8, maxReps: 15, targetRir: 2, notes: 'Controlled eccentric' },
+            { exerciseId: 'ex_lc', defaultSets: 2, minReps: 10, maxReps: 15, targetRir: 2, notes: 'Pause at contraction' },
+            { exerciseId: 'ex_scr_calf', defaultSets: 3, minReps: 8, maxReps: 15, targetRir: 2, notes: 'Full stretch on calf block' }
+          ]
+        },
+        {
+          id: 'day_sat',
+          name: 'SATURDAY — BACK + DELTS + ARMS',
+          shortName: 'Sat: Back + Delts + Arms',
+          exercises: [
+            { exerciseId: 'ex_nmlp', defaultSets: 2, minReps: 8, maxReps: 12, targetRir: 2, notes: 'Neutral attachment' },
+            { exerciseId: 'ex_wpcr', defaultSets: 2, minReps: 10, maxReps: 15, targetRir: 2, notes: 'Wide pronated grip' },
+            { exerciseId: 'ex_crf', defaultSets: 2, minReps: 12, maxReps: 20, targetRir: 2, notes: 'Rear delt focus' },
+            { exerciseId: 'ex_clr', defaultSets: 2, minReps: 12, maxReps: 20, targetRir: 2, notes: 'Side delts' },
+            { exerciseId: 'ex_bcc', defaultSets: 2, minReps: 10, maxReps: 15, targetRir: 2, notes: 'Peak contraction' },
+            { exerciseId: 'ex_saoct', defaultSets: 2, minReps: 10, maxReps: 15, targetRir: 2, notes: 'Single arm extension' }
+          ]
+        }
+      ]
+    };
+
+    // --- HELPERS & UTILITIES ---
+    function formatAusDate(isoString) {
+      if (!isoString) return '';
+      const date = new Date(isoString);
+      const day = date.getDate();
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      const month = monthNames[date.getMonth()];
+      const year = date.getFullYear();
+      return `${day} ${month} ${year}`;
+    }
+
+    function formatShortAusDate(isoString) {
+      if (!isoString) return '';
+      const date = new Date(isoString);
+      const day = date.getDate();
+      const monthNames = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+      return `${day} ${monthNames[date.getMonth()]}`;
+    }
+
+    function playTimerChime() {
+      try {
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        if (!AudioContext) return;
+        const ctx = new AudioContext();
+        [0, 0.2, 0.4].forEach((delay, idx) => {
+          const osc = ctx.createOscillator();
+          const gain = ctx.createGain();
+          osc.type = 'sine';
+          osc.frequency.value = idx === 2 ? 880 : 587.33;
+          gain.gain.setValueAtTime(0.2, ctx.currentTime + delay);
+          gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + delay + 0.3);
+          osc.connect(gain);
+          gain.connect(ctx.destination);
+          osc.start(ctx.currentTime + delay);
+          osc.stop(ctx.currentTime + delay + 0.35);
+        });
+      } catch (e) {
+        console.warn('Audio chime unsupported or blocked', e);
+      }
+    }
+
+    function calculateProgression(currentSets, minReps, maxReps, targetRir) {
+      if (!currentSets || currentSets.length === 0) return null;
+      const validSets = currentSets.filter(s => s.weight > 0 && s.reps > 0);
+      if (validSets.length === 0) return null;
+
+      const allTopReps = validSets.every(s => Number(s.reps) >= maxReps);
+      const avgRir = validSets.reduce((acc, s) => acc + Number(s.rir || 0), 0) / validSets.length;
+      const firstWeight = Number(validSets[0].weight);
+
+      if (allTopReps && avgRir >= (targetRir - 0.5)) {
+        const nextWeight = (firstWeight + 2.5).toFixed(1).replace(/\.0$/, '');
+        return { type: 'increase', message: `Ready to progress: consider ${nextWeight} kg next session.` };
+      }
+
+      const anyBelowMin = validSets.some(s => Number(s.reps) < minReps);
+      const anyOverfatigued = validSets.some(s => Number(s.rir) < (targetRir - 2));
+
+      if (anyBelowMin || anyOverfatigued) {
+        return { type: 'heavy', message: `Current load (${firstWeight} kg) may be too heavy. Consider holding weight or dropping 2.5 kg.` };
+      }
+
+      return { type: 'maintain', message: `Maintain ${firstWeight} kg and push for upper rep range (${maxReps} reps).` };
+    }
+
+    function calcE1RM(weight, reps, rir = 0) {
+      const totalReps = Number(reps) + Number(rir);
+      if (totalReps <= 0 || weight <= 0) return 0;
+      if (totalReps === 1) return weight;
+      return Math.round(weight * (1 + totalReps / 30));
+    }
+
+    function App() {
+      const [programs, setPrograms] = useState(() => {
+        const saved = localStorage.getItem('ironlog_programs');
+        return saved ? JSON.parse(saved) : [DEFAULT_PROGRAM];
+      });
+
+      const [activeProgramId, setActiveProgramId] = useState(() => {
+        return localStorage.getItem('ironlog_active_program_id') || DEFAULT_PROGRAM.id;
+      });
+
+      const [currentWeek, setCurrentWeek] = useState(() => {
+        return Number(localStorage.getItem('ironlog_current_week')) || 1;
+      });
+
+      const [exercises, setExercises] = useState(() => {
+        const saved = localStorage.getItem('ironlog_exercises');
+        return saved ? JSON.parse(saved) : DEFAULT_EXERCISES;
+      });
+
+      const [history, setHistory] = useState(() => {
+        const saved = localStorage.getItem('ironlog_history');
+        return saved ? JSON.parse(saved) : [];
+      });
+
+      const [activeSession, setActiveSession] = useState(() => {
+        const saved = localStorage.getItem('ironlog_active_session');
+        return saved ? JSON.parse(saved) : null;
+      });
+
+      const [activeTab, setActiveTab] = useState('dashboard');
+      const [selectedHistoryExerciseId, setSelectedHistoryExerciseId] = useState('ex_sbs');
+      const [timerEndTime, setTimerEndTime] = useState(null);
+      const [timerSecondsLeft, setTimerSecondsLeft] = useState(0);
+
+      useEffect(() => {
+        localStorage.setItem('ironlog_programs', JSON.stringify(programs));
+      }, [programs]);
+
+      useEffect(() => {
+        localStorage.setItem('ironlog_active_program_id', activeProgramId);
+      }, [activeProgramId]);
+
+      useEffect(() => {
+        localStorage.setItem('ironlog_current_week', currentWeek.toString());
+      }, [currentWeek]);
+
+      useEffect(() => {
+        localStorage.setItem('ironlog_exercises', JSON.stringify(exercises));
+      }, [exercises]);
+
+      useEffect(() => {
+        localStorage.setItem('ironlog_history', JSON.stringify(history));
+      }, [history]);
+
+      useEffect(() => {
+        if (activeSession) {
+          localStorage.setItem('ironlog_active_session', JSON.stringify(activeSession));
+        } else {
+          localStorage.removeItem('ironlog_active_session');
+        }
+      }, [activeSession]);
+
+      const activeProgram = useMemo(() => {
+        return programs.find(p => p.id === activeProgramId) || programs[0] || DEFAULT_PROGRAM;
+      }, [programs, activeProgramId]);
+
+      useEffect(() => {
+        if (!timerEndTime) {
+          setTimerSecondsLeft(0);
+          return;
+        }
+        const interval = setInterval(() => {
+          const now = Date.now();
+          const diff = Math.max(0, Math.ceil((timerEndTime - now) / 1000));
+          setTimerSecondsLeft(diff);
+          if (diff === 0) {
+            setTimerEndTime(null);
+            playTimerChime();
+          }
+        }, 500);
+        return () => clearInterval(interval);
+      }, [timerEndTime]);
+
+      const startRestTimer = (seconds) => {
+        setTimerEndTime(Date.now() + seconds * 1000);
+        setTimerSecondsLeft(seconds);
+      };
+
+      const cancelRestTimer = () => {
+        setTimerEndTime(null);
+        setTimerSecondsLeft(0);
+      };
+
+      const getPreviousExercisePerformance = (exerciseId) => {
+        for (const session of history) {
+          const found = session.exercises.find(e => e.exerciseId === exerciseId && e.sets && e.sets.length > 0);
+          if (found) {
+            return {
+              date: session.date,
+              sets: found.sets,
+              notes: found.notes
+            };
+          }
+        }
+        return null;
+      };
+
+      const handleStartWorkout = (dayObj) => {
+        const weekInfo = WEEK_MODIFIERS[currentWeek] || WEEK_MODIFIERS[1];
+        const volumeMod = weekInfo.volumeMod;
+
+        const sessionExercises = dayObj.exercises.map(item => {
+          const exMeta = exercises.find(e => e.id === item.exerciseId) || { name: 'Unknown Exercise' };
+          const prev = getPreviousExercisePerformance(item.exerciseId);
+          
+          const targetSetCount = Math.max(1, item.defaultSets + volumeMod);
+          
+          const initialSets = [];
+          for (let i = 0; i < targetSetCount; i++) {
+            const prevSet = prev && prev.sets[i] ? prev.sets[i] : (prev && prev.sets[0] ? prev.sets[0] : null);
+            initialSets.push({
+              setNum: i + 1,
+              weight: prevSet ? prevSet.weight : '',
+              reps: prevSet ? prevSet.reps : '',
+              rir: prevSet ? prevSet.rir : item.targetRir,
+              completed: false
+            });
+          }
+
+          return {
+            exerciseId: item.exerciseId,
+            exerciseName: exMeta.name,
+            minReps: item.minReps,
+            maxReps: item.maxReps,
+            targetRir: item.targetRir,
+            notes: item.notes || '',
+            userNotes: '',
+            sets: initialSets,
+            completed: false
+          };
+        });
+
+        const newSession = {
+          id: 'sess_' + Date.now(),
+          startTime: new Date().toISOString(),
+          programId: activeProgram.id,
+          week: currentWeek,
+          dayId: dayObj.id,
+          dayName: dayObj.name,
+          exercises: sessionExercises
+        };
+
+        setActiveSession(newSession);
+        setActiveTab('workout');
+      };
+
+      const handleFinishWorkout = () => {
+        if (!activeSession) return;
+
+        const cleanedExercises = activeSession.exercises.map(ex => ({
+          ...ex,
+          sets: ex.sets
+            .filter(s => s.weight !== '' && s.reps !== '')
+            .map(s => ({
+              weight: Number(s.weight),
+              reps: Number(s.reps),
+              rir: Number(s.rir)
+            }))
+        })).filter(ex => ex.sets.length > 0);
+
+        if (cleanedExercises.length === 0) {
+          if (!confirm("No completed sets logged. Cancel this workout?")) {
+            return;
+          }
+          setActiveSession(null);
+          setActiveTab('dashboard');
+          return;
+        }
+
+        const newHistoryRecord = {
+          id: activeSession.id,
+          date: new Date().toISOString(),
+          programId: activeSession.programId,
+          week: activeSession.week,
+          dayId: activeSession.dayId,
+          dayName: activeSession.dayName,
+          exercises: cleanedExercises
+        };
+
+        setHistory(prev => [newHistoryRecord, ...prev]);
+        setActiveSession(null);
+        setActiveTab('dashboard');
+      };
+
+      const handleExportData = () => {
+        const data = {
+          programs,
+          activeProgramId,
+          currentWeek,
+          exercises,
+          history,
+          exportDate: new Date().toISOString()
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `ironlog_backup_${new Date().toISOString().split('T')[0]}.json`;
+        a.click();
+        URL.revokeObjectURL(url);
+      };
+
+      const handleImportData = (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (evt) => {
+          try {
+            const parsed = JSON.parse(evt.target.result);
+            if (parsed.programs) setPrograms(parsed.programs);
+            if (parsed.activeProgramId) setActiveProgramId(parsed.activeProgramId);
+            if (parsed.currentWeek) setCurrentWeek(parsed.currentWeek);
+            if (parsed.exercises) setExercises(parsed.exercises);
+            if (parsed.history) setHistory(parsed.history);
+            alert("Data imported successfully!");
+          } catch (err) {
+            alert("Failed to parse JSON file.");
+          }
+        };
+        reader.readAsText(file);
+      };
+
+      return (
+        <div className="flex-1 flex flex-col min-h-screen bg-slate-950 text-slate-100 max-w-md md:max-w-4xl mx-auto w-full shadow-2xl relative pb-20">
+          
+          {/* HEADER BAR */}
+          <header className="bg-slate-900 border-b border-slate-800 px-4 py-3 sticky top-0 z-30 flex items-center justify-between shadow-md">
+            <div className="flex items-center space-x-2">
+              <div className="bg-emerald-500 text-slate-950 p-1.5 rounded-lg font-black tracking-widest text-xs flex items-center justify-center">
+                IRON
+              </div>
+              <div>
+                <h1 className="font-bold text-sm tracking-tight text-slate-100 leading-none">IronLog</h1>
+                <p className="text-[10px] text-slate-400 leading-tight mt-0.5">{activeProgram.name}</p>
+              </div>
+            </div>
+
+            {/* Rest Timer Widget */}
+            <div className="flex items-center space-x-2">
+              {timerSecondsLeft > 0 ? (
+                <button 
+                  onClick={cancelRestTimer}
+                  className="bg-amber-500/20 text-amber-400 border border-amber-500/40 px-3 py-1 rounded-full text-xs font-mono font-bold animate-pulse flex items-center space-x-1"
+                >
+                  <span>⏱</span>
+                  <span>{Math.floor(timerSecondsLeft / 60)}:{String(timerSecondsLeft % 60).padStart(2, '0')}</span>
+                  <span className="text-[10px] ml-1 opacity-70">✕</span>
+                </button>
+              ) : (
+                <div className="flex items-center bg-slate-800/80 rounded-full p-1 border border-slate-700 text-xs text-slate-300">
+                  <span className="px-2 text-[10px] font-semibold text-slate-400">REST</span>
+                  <button onClick={() => startRestTimer(90)} className="px-2 py-0.5 hover:bg-slate-700 rounded-full transition text-[11px] font-mono">90s</button>
+                  <button onClick={() => startRestTimer(120)} className="px-2 py-0.5 hover:bg-slate-700 rounded-full transition text-[11px] font-mono">2m</button>
+                  <button onClick={() => startRestTimer(180)} className="px-2 py-0.5 hover:bg-slate-700 rounded-full transition text-[11px] font-mono">3m</button>
+                </div>
+              )}
+            </div>
+          </header>
+
+          {/* MAIN CONTENT CONTAINER */}
+          <main className="flex-1 p-3 md:p-6 overflow-y-auto">
+            {activeTab === 'dashboard' && (
+              <DashboardView 
+                activeProgram={activeProgram}
+                currentWeek={currentWeek}
+                setCurrentWeek={setCurrentWeek}
+                history={history}
+                activeSession={activeSession}
+                onStartWorkout={handleStartWorkout}
+                onContinueWorkout={() => setActiveTab('workout')}
+                onViewExerciseHistory={(exId) => {
+                  setSelectedHistoryExerciseId(exId);
+                  setActiveTab('history');
+                }}
+              />
+            )}
+
+            {activeTab === 'workout' && (
+              <WorkoutView 
+                activeSession={activeSession}
+                setActiveSession={setActiveSession}
+                onFinishWorkout={handleFinishWorkout}
+                getPreviousExercisePerformance={getPreviousExercisePerformance}
+                startRestTimer={startRestTimer}
+                currentWeek={currentWeek}
+              />
+            )}
+
+            {activeTab === 'history' && (
+              <HistoryView 
+                history={history}
+                exercises={exercises}
+                activeProgram={activeProgram}
+                selectedHistoryExerciseId={selectedHistoryExerciseId}
+                setSelectedHistoryExerciseId={setSelectedHistoryExerciseId}
+                setHistory={setHistory}
+              />
+            )}
+
+            {activeTab === 'program' && (
+              <ProgramEditorView 
+                programs={programs}
+                setPrograms={setPrograms}
+                activeProgramId={activeProgramId}
+                setActiveProgramId={setActiveProgramId}
+                exercises={exercises}
+                currentWeek={currentWeek}
+                setCurrentWeek={setCurrentWeek}
+              />
+            )}
+
+            {activeTab === 'exercises' && (
+              <ExerciseLibraryView 
+                exercises={exercises}
+                setExercises={setExercises}
+                history={history}
+                onSelectExercise={(id) => {
+                  setSelectedHistoryExerciseId(id);
+                  setActiveTab('history');
+                }}
+                onExport={handleExportData}
+                onImport={handleImportData}
+              />
+            )}
+          </main>
+
+          {/* BOTTOM NAVIGATION */}
+          <nav className="fixed bottom-0 left-0 right-0 bg-slate-900/95 backdrop-blur border-t border-slate-800 z-40 max-w-md md:max-w-4xl mx-auto">
+            <div className="grid grid-cols-5 h-16 text-center text-[10px] font-medium">
+              <button 
+                onClick={() => setActiveTab('dashboard')}
+                className={`flex flex-col items-center justify-center space-y-1 ${activeTab === 'dashboard' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                <span className="text-lg">🏠</span>
+                <span>Home</span>
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('workout')}
+                className={`flex flex-col items-center justify-center space-y-1 relative ${activeTab === 'workout' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                {activeSession && (
+                  <span className="absolute top-2 right-4 w-2.5 h-2.5 bg-emerald-500 rounded-full animate-ping"></span>
+                )}
+                <span className="text-lg">🏋️</span>
+                <span>{activeSession ? 'Active' : 'Workout'}</span>
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('history')}
+                className={`flex flex-col items-center justify-center space-y-1 ${activeTab === 'history' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                <span className="text-lg">📈</span>
+                <span>History</span>
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('program')}
+                className={`flex flex-col items-center justify-center space-y-1 ${activeTab === 'program' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                <span className="text-lg">📋</span>
+                <span>Program</span>
+              </button>
+
+              <button 
+                onClick={() => setActiveTab('exercises')}
+                className={`flex flex-col items-center justify-center space-y-1 ${activeTab === 'exercises' ? 'text-emerald-400 font-bold' : 'text-slate-400 hover:text-slate-200'}`}
+              >
+                <span className="text-lg">📚</span>
+                <span>Library</span>
+              </button>
+            </div>
+          </nav>
+
+        </div>
+      );
+    }
+
+    // --- DASHBOARD VIEW ---
+    function DashboardView({ 
+      activeProgram, 
+      currentWeek, 
+      setCurrentWeek, 
+      history, 
+      activeSession, 
+      onStartWorkout, 
+      onContinueWorkout,
+      onViewExerciseHistory 
+    }) {
+      const weekMeta = WEEK_MODIFIERS[currentWeek] || WEEK_MODIFIERS[1];
+      const recentWorkouts = history.slice(0, 5);
+
+      const dayIndex = (new Date().getDay() + 6) % 7;
+      const scheduledDay = activeProgram.days[dayIndex] || activeProgram.days[0];
+
+      return (
+        <div className="space-y-5">
+          {activeSession && (
+            <div className="bg-gradient-to-r from-emerald-900/60 to-slate-900 border-2 border-emerald-500/80 rounded-xl p-4 shadow-lg flex items-center justify-between">
+              <div>
+                <div className="flex items-center space-x-2">
+                  <span className="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  <span className="text-xs font-bold uppercase tracking-wider text-emerald-400">Session In Progress</span>
+                </div>
+                <h2 className="text-lg font-bold text-slate-100 mt-0.5">{activeSession.dayName}</h2>
+                <p className="text-xs text-slate-300">Week {activeSession.week} • {activeSession.exercises.length} Exercises</p>
+              </div>
+              <button 
+                onClick={onContinueWorkout}
+                className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 px-4 py-2 rounded-lg font-bold text-xs shadow-md transition transform active:scale-95"
+              >
+                RESUME
+              </button>
+            </div>
+          )}
+
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-sm space-y-3">
+            <div className="flex justify-between items-start">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Current Block</span>
+                <h2 className="text-base font-bold text-slate-100">{activeProgram.name}</h2>
+              </div>
+              <div className="text-right">
+                <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Block Target</span>
+                <div className="text-xs font-semibold text-emerald-400">{weekMeta.rir}</div>
+              </div>
+            </div>
+
+            <div>
+              <div className="flex justify-between items-center mb-1.5">
+                <span className="text-xs font-medium text-slate-300">Training Week:</span>
+                <span className="text-xs font-bold text-slate-200">Week {currentWeek} of {activeProgram.weeksCount}</span>
+              </div>
+              <div className="grid grid-cols-6 gap-1.5">
+                {[1, 2, 3, 4, 5, 6].map(w => (
+                  <button
+                    key={w}
+                    onClick={() => setCurrentWeek(w)}
+                    className={`py-1.5 text-center text-xs font-bold rounded-lg border transition ${
+                      currentWeek === w 
+                        ? 'bg-emerald-500/20 text-emerald-400 border-emerald-500/60' 
+                        : 'bg-slate-800/60 text-slate-400 border-slate-700/60 hover:text-slate-200'
+                    }`}
+                  >
+                    W{w}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[11px] text-slate-400 mt-2 italic bg-slate-950/40 p-2 rounded border border-slate-800/80">
+                "{weekMeta.description}"
+              </p>
+            </div>
+          </div>
+
+          {!activeSession && (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 shadow-md space-y-3">
+              <div className="flex items-center justify-between">
+                <div>
+                  <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Today's Split Day</span>
+                  <h3 className="text-base font-bold text-slate-100">{scheduledDay ? scheduledDay.name : 'Today Workout'}</h3>
+                </div>
+                <span className="text-xs text-slate-400 bg-slate-800 px-2.5 py-1 rounded-full font-mono">
+                  {scheduledDay ? `${scheduledDay.exercises.length} Ex` : ''}
+                </span>
+              </div>
+
+              {scheduledDay && (
+                <button
+                  onClick={() => onStartWorkout(scheduledDay)}
+                  className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black tracking-wide py-3.5 px-4 rounded-xl text-sm shadow-lg shadow-emerald-950/40 transition transform active:scale-[0.98] flex items-center justify-center space-x-2"
+                >
+                  <span>START TODAY'S WORKOUT</span>
+                  <span>→</span>
+                </button>
+              )}
+            </div>
+          )}
+
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">6-Day Workout Schedule</h3>
+            <div className="space-y-2">
+              {activeProgram.days.map((day) => (
+                <div 
+                  key={day.id} 
+                  className="flex items-center justify-between p-2.5 bg-slate-950/60 rounded-lg border border-slate-800/60 hover:border-slate-700 transition"
+                >
+                  <div className="min-w-0 flex-1 pr-2">
+                    <p className="text-xs font-bold text-slate-200 truncate">{day.name}</p>
+                    <p className="text-[11px] text-slate-400 truncate">
+                      {day.exercises.length} exercises
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => onStartWorkout(day)}
+                    disabled={!!activeSession}
+                    className="shrink-0 bg-slate-800 hover:bg-slate-700 text-slate-200 px-3 py-1.5 rounded-md text-xs font-semibold border border-slate-700 disabled:opacity-40"
+                  >
+                    Start
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Recent Completed Sessions</h3>
+            {recentWorkouts.length === 0 ? (
+              <p className="text-xs text-slate-500 italic py-2">No completed workouts logged yet. Use the History tab or Start Workout to add entries!</p>
+            ) : (
+              <div className="space-y-2.5">
+                {recentWorkouts.map(log => (
+                  <div key={log.id} className="p-3 bg-slate-950/70 border border-slate-800/80 rounded-lg space-y-1.5">
+                    <div className="flex justify-between items-center">
+                      <span className="text-xs font-bold text-emerald-400">{log.dayName}</span>
+                      <span className="text-[11px] font-mono text-slate-400">{formatAusDate(log.date)}</span>
+                    </div>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      {log.exercises.map(ex => (
+                        <button
+                          key={ex.exerciseId}
+                          onClick={() => onViewExerciseHistory(ex.exerciseId)}
+                          className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 text-[10px] px-2 py-0.5 rounded font-mono transition"
+                        >
+                          {ex.exerciseName}: {ex.sets.map(s => `${s.weight}×${s.reps}`).join(', ')}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+        </div>
+      );
+    }
+
+    // --- WORKOUT VIEW ---
+    function WorkoutView({ 
+      activeSession, 
+      setActiveSession, 
+      onFinishWorkout, 
+      getPreviousExercisePerformance,
+      startRestTimer,
+      currentWeek
+    }) {
+      if (!activeSession) {
+        return (
+          <div className="text-center py-16 space-y-4">
+            <div className="text-4xl">🏋️</div>
+            <h2 className="text-base font-bold text-slate-300">No Active Workout Session</h2>
+            <p className="text-xs text-slate-500 max-w-xs mx-auto">
+              Select a workout day from the Home dashboard or Program tab to start logging sets.
+            </p>
+          </div>
+        );
+      }
+
+      const updateSet = (exerciseIndex, setIndex, field, value) => {
+        setActiveSession(prev => {
+          const updated = { ...prev };
+          const ex = { ...updated.exercises[exerciseIndex] };
+          const sets = [...ex.sets];
+          sets[setIndex] = { ...sets[setIndex], [field]: value };
+          ex.sets = sets;
+          updated.exercises[exerciseIndex] = ex;
+          return updated;
+        });
+      };
+
+      const addSet = (exerciseIndex) => {
+        setActiveSession(prev => {
+          const updated = { ...prev };
+          const ex = { ...updated.exercises[exerciseIndex] };
+          const lastSet = ex.sets[ex.sets.length - 1];
+          const newSet = {
+            setNum: ex.sets.length + 1,
+            weight: lastSet ? lastSet.weight : '',
+            reps: lastSet ? lastSet.reps : '',
+            rir: lastSet ? lastSet.rir : ex.targetRir,
+            completed: false
+          };
+          ex.sets = [...ex.sets, newSet];
+          updated.exercises[exerciseIndex] = ex;
+          return updated;
+        });
+      };
+
+      const removeSet = (exerciseIndex) => {
+        setActiveSession(prev => {
+          const updated = { ...prev };
+          const ex = { ...updated.exercises[exerciseIndex] };
+          if (ex.sets.length <= 1) return prev;
+          ex.sets = ex.sets.slice(0, -1);
+          updated.exercises[exerciseIndex] = ex;
+          return updated;
+        });
+      };
+
+      const updateNotes = (exerciseIndex, notes) => {
+        setActiveSession(prev => {
+          const updated = { ...prev };
+          updated.exercises[exerciseIndex] = {
+            ...updated.exercises[exerciseIndex],
+            userNotes: notes
+          };
+          return updated;
+        });
+      };
+
+      const toggleSetComplete = (exerciseIndex, setIndex) => {
+        setActiveSession(prev => {
+          const updated = { ...prev };
+          const ex = { ...updated.exercises[exerciseIndex] };
+          const sets = [...ex.sets];
+          const currentState = sets[setIndex].completed;
+          sets[setIndex] = { ...sets[setIndex], completed: !currentState };
+          ex.sets = sets;
+          
+          if (!currentState) {
+            startRestTimer(90);
+          }
+
+          ex.completed = sets.every(s => s.completed);
+          updated.exercises[exerciseIndex] = ex;
+          return updated;
+        });
+      };
+
+      return (
+        <div className="space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-3.5 sticky top-14 z-20 shadow-md flex justify-between items-center">
+            <div>
+              <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">Week {activeSession.week} Workout</span>
+              <h2 className="text-sm font-bold text-slate-100 truncate">{activeSession.dayName}</h2>
+            </div>
+            <button
+              onClick={onFinishWorkout}
+              className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black text-xs px-3.5 py-2 rounded-lg shadow transition active:scale-95"
+            >
+              FINISH WORKOUT
+            </button>
+          </div>
+
+          <div className="space-y-4">
+            {activeSession.exercises.map((ex, exIdx) => {
+              const prevPerf = getPreviousExercisePerformance(ex.exerciseId);
+              const progressionAdvice = calculateProgression(ex.sets, ex.minReps, ex.maxReps, ex.targetRir);
+
+              return (
+                <div 
+                  key={ex.exerciseId + exIdx} 
+                  className={`bg-slate-900 border rounded-xl p-3.5 shadow-sm space-y-3 transition ${
+                    ex.completed ? 'border-emerald-500/50 bg-slate-900/90' : 'border-slate-800'
+                  }`}
+                >
+                  <div>
+                    <div className="flex justify-between items-start">
+                      <h3 className="text-sm font-bold text-slate-100 tracking-tight">{ex.exerciseName}</h3>
+                      <span className="text-[11px] font-semibold text-emerald-400 bg-emerald-950/60 border border-emerald-800/60 px-2 py-0.5 rounded font-mono">
+                        {ex.sets.length} × {ex.minReps}–{ex.maxReps} | Target {ex.targetRir} RIR
+                      </span>
+                    </div>
+                    {ex.notes && (
+                      <p className="text-[11px] text-slate-400 mt-0.5">{ex.notes}</p>
+                    )}
+                  </div>
+
+                  <div className="bg-slate-950/80 border border-slate-800/80 rounded-lg p-2.5">
+                    <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400 mb-1 flex items-center justify-between">
+                      <span>LAST TIME</span>
+                      {prevPerf && <span className="font-mono text-[10px] text-slate-500">{formatShortAusDate(prevPerf.date)}</span>}
+                    </div>
+                    
+                    {prevPerf && prevPerf.sets && prevPerf.sets.length > 0 ? (
+                      <div className="flex flex-wrap gap-2 text-xs font-mono font-bold text-slate-300">
+                        {prevPerf.sets.map((s, sIdx) => (
+                          <span key={sIdx} className="bg-slate-900 border border-slate-800 px-2 py-0.5 rounded text-emerald-300">
+                            {s.weight} kg × {s.reps} @{s.rir}RIR
+                          </span>
+                        ))}
+                      </div>
+                    ) : (
+                      <span className="text-xs text-slate-500 italic">No previous logs for this exercise.</span>
+                    )}
+                  </div>
+
+                  {progressionAdvice && (
+                    <div className={`p-2 rounded-lg text-xs font-semibold flex items-center space-x-1.5 ${
+                      progressionAdvice.type === 'increase' 
+                        ? 'bg-emerald-950/60 text-emerald-300 border border-emerald-800/60' 
+                        : progressionAdvice.type === 'heavy'
+                        ? 'bg-amber-950/60 text-amber-300 border border-amber-800/60'
+                        : 'bg-slate-950 text-slate-400 border border-slate-800'
+                    }`}>
+                      <span className="text-sm">⚡</span>
+                      <span>{progressionAdvice.message}</span>
+                    </div>
+                  )}
+
+                  <div className="space-y-1.5">
+                    <div className="grid grid-cols-12 text-[10px] font-bold text-slate-400 uppercase tracking-wider px-1">
+                      <span className="col-span-2">SET</span>
+                      <span className="col-span-3 text-center">KG</span>
+                      <span className="col-span-3 text-center">REPS</span>
+                      <span className="col-span-2 text-center">RIR</span>
+                      <span className="col-span-2 text-right">DONE</span>
+                    </div>
+
+                    {ex.sets.map((set, setIdx) => {
+                      const prevSet = prevPerf && prevPerf.sets[setIdx] ? prevPerf.sets[setIdx] : null;
+
+                      return (
+                        <div 
+                          key={setIdx} 
+                          className={`grid grid-cols-12 items-center gap-1.5 p-1 rounded-lg transition ${
+                            set.completed ? 'bg-emerald-950/20 border border-emerald-900/30' : 'bg-slate-950/40'
+                          }`}
+                        >
+                          <div className="col-span-2 flex flex-col">
+                            <span className="text-xs font-bold font-mono text-slate-300">Set {setIdx + 1}</span>
+                            {prevSet && (
+                              <span className="text-[9px] font-mono text-slate-500 truncate">{prevSet.weight}x{prevSet.reps}</span>
+                            )}
+                          </div>
+
+                          <div className="col-span-3 flex items-center">
+                            <input
+                              type="number"
+                              step="0.5"
+                              placeholder="kg"
+                              value={set.weight}
+                              onChange={(e) => updateSet(exIdx, setIdx, 'weight', e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 text-center font-mono font-bold text-sm py-1.5 rounded text-slate-100 outline-none"
+                            />
+                          </div>
+
+                          <div className="col-span-3 flex items-center">
+                            <input
+                              type="number"
+                              placeholder="reps"
+                              value={set.reps}
+                              onChange={(e) => updateSet(exIdx, setIdx, 'reps', e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-700 focus:border-emerald-500 text-center font-mono font-bold text-sm py-1.5 rounded text-slate-100 outline-none"
+                            />
+                          </div>
+
+                          <div className="col-span-2">
+                            <select
+                              value={set.rir}
+                              onChange={(e) => updateSet(exIdx, setIdx, 'rir', e.target.value)}
+                              className="w-full bg-slate-900 border border-slate-700 text-center font-mono text-xs py-1.5 rounded text-slate-100 outline-none"
+                            >
+                              <option value="0">0</option>
+                              <option value="1">1</option>
+                              <option value="2">2</option>
+                              <option value="3">3</option>
+                              <option value="4">4+</option>
+                            </select>
+                          </div>
+
+                          <div className="col-span-2 flex justify-end">
+                            <button
+                              onClick={() => toggleSetComplete(exIdx, setIdx)}
+                              className={`w-9 h-8 rounded-lg font-bold flex items-center justify-center transition border ${
+                                set.completed 
+                                  ? 'bg-emerald-500 text-slate-950 border-emerald-400' 
+                                  : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-slate-200'
+                              }`}
+                            >
+                              {set.completed ? '✓' : ''}
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+
+                  <div className="flex items-center justify-between pt-1 text-xs">
+                    <div className="flex space-x-2">
+                      <button
+                        onClick={() => addSet(exIdx)}
+                        className="bg-slate-800 hover:bg-slate-700 text-slate-300 border border-slate-700 px-2.5 py-1 rounded font-semibold text-[11px]"
+                      >
+                        + Add Set
+                      </button>
+                      {ex.sets.length > 1 && (
+                        <button
+                          onClick={() => removeSet(exIdx)}
+                          className="bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700 px-2.5 py-1 rounded text-[11px]"
+                        >
+                          - Set
+                        </button>
+                      )}
+                    </div>
+
+                    <input 
+                      type="text"
+                      placeholder="Optional notes for today..."
+                      value={ex.userNotes}
+                      onChange={(e) => updateNotes(exIdx, e.target.value)}
+                      className="bg-slate-950/60 border border-slate-800 rounded px-2 py-1 text-[11px] text-slate-200 w-1/2 focus:outline-none focus:border-slate-600"
+                    />
+                  </div>
+
+                </div>
+              );
+            })}
+          </div>
+
+          <div className="pt-4">
+            <button
+              onClick={onFinishWorkout}
+              className="w-full bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-black py-3.5 rounded-xl shadow-lg text-sm tracking-wider uppercase transition active:scale-[0.99]"
+            >
+              COMPLETE WORKOUT
+            </button>
+          </div>
+
+        </div>
+      );
+    }
+
+    // --- HISTORY VIEW (INCLUDES ADD PAST WORKOUT MODAL & MANAGEMENT) ---
+    function HistoryView({ 
+      history, 
+      exercises, 
+      activeProgram,
+      selectedHistoryExerciseId, 
+      setSelectedHistoryExerciseId,
+      setHistory 
+    }) {
+      const [isAddPastOpen, setIsAddPastOpen] = useState(false);
+      const [pastDate, setPastDate] = useState('2026-09-07');
+      const [pastDayId, setPastDayId] = useState(activeProgram.days[0].id);
+      const [pastWeek, setPastWeek] = useState(1);
+      const [pastExercisesData, setPastExercisesData] = useState([]);
+
+      // Initialize exercise data when day selection changes in modal
+      useEffect(() => {
+        const selectedDay = activeProgram.days.find(d => d.id === pastDayId) || activeProgram.days[0];
+        const weekInfo = WEEK_MODIFIERS[pastWeek] || WEEK_MODIFIERS[1];
+        
+        const initial = selectedDay.exercises.map(item => {
+          const exMeta = exercises.find(e => e.id === item.exerciseId);
+          const setCount = Math.max(1, item.defaultSets + weekInfo.volumeMod);
+          const sets = [];
+          for (let i = 0; i < setCount; i++) {
+            sets.push({ weight: '', reps: '', rir: item.targetRir });
+          }
+          return {
+            exerciseId: item.exerciseId,
+            exerciseName: exMeta ? exMeta.name : item.exerciseId,
+            sets
+          };
+        });
+        setPastExercisesData(initial);
+      }, [pastDayId, pastWeek, activeProgram, exercises]);
+
+      const updatePastSet = (exIdx, setIdx, field, val) => {
+        setPastExercisesData(prev => {
+          const updated = [...prev];
+          const sets = [...updated[exIdx].sets];
+          sets[setIdx] = { ...sets[setIdx], [field]: val };
+          updated[exIdx] = { ...updated[exIdx], sets };
+          return updated;
+        });
+      };
+
+      const handleSavePastWorkout = () => {
+        const selectedDay = activeProgram.days.find(d => d.id === pastDayId) || activeProgram.days[0];
+        
+        const cleanedExercises = pastExercisesData.map(ex => ({
+          exerciseId: ex.exerciseId,
+          exerciseName: ex.exerciseName,
+          sets: ex.sets
+            .filter(s => s.weight !== '' && s.reps !== '')
+            .map(s => ({
+              weight: Number(s.weight),
+              reps: Number(s.reps),
+              rir: Number(s.rir)
+            }))
+        })).filter(ex => ex.sets.length > 0);
+
+        if (cleanedExercises.length === 0) {
+          alert("Please fill in at least one set weight and reps.");
+          return;
+        }
+
+        const newRecord = {
+          id: 'hist_past_' + Date.now(),
+          date: new Date(pastDate + 'T12:00:00.000Z').toISOString(),
+          programId: activeProgram.id,
+          week: pastWeek,
+          dayId: selectedDay.id,
+          dayName: selectedDay.name,
+          exercises: cleanedExercises
+        };
+
+        // Insert and sort chronologically descending
+        setHistory(prev => {
+          const combined = [newRecord, ...prev];
+          return combined.sort((a, b) => new Date(b.date) - new Date(a.date));
+        });
+
+        setIsAddPastOpen(false);
+      };
+
+      const handleDeleteSession = (sessionId) => {
+        if (confirm("Are you sure you want to delete this historical workout log?")) {
+          setHistory(prev => prev.filter(s => s.id !== sessionId));
+        }
+      };
+
+      const selectedExercise = exercises.find(e => e.id === selectedHistoryExerciseId) || exercises[0];
+
+      const exerciseLogs = useMemo(() => {
+        const logs = [];
+        history.forEach(session => {
+          const ex = session.exercises.find(e => e.exerciseId === selectedHistoryExerciseId);
+          if (ex && ex.sets && ex.sets.length > 0) {
+            const topWeight = Math.max(...ex.sets.map(s => Number(s.weight) || 0));
+            const totalVolume = ex.sets.reduce((acc, s) => acc + ((Number(s.weight) || 0) * (Number(s.reps) || 0)), 0);
+            const totalReps = ex.sets.reduce((acc, s) => acc + (Number(s.reps) || 0), 0);
+            const bestSet = ex.sets.reduce((best, cur) => {
+              const e1rm = calcE1RM(cur.weight, cur.reps, cur.rir);
+              return e1rm > best.e1rm ? { ...cur, e1rm } : best;
+            }, { weight: 0, reps: 0, rir: 0, e1rm: 0 });
+
+            logs.push({
+              sessionId: session.id,
+              date: session.date,
+              dayName: session.dayName,
+              sets: ex.sets,
+              notes: ex.notes || ex.userNotes,
+              topWeight,
+              totalVolume,
+              totalReps,
+              bestE1RM: bestSet.e1rm
+            });
+          }
+        });
+        return logs;
+      }, [history, selectedHistoryExerciseId]);
+
+      const maxWeightEver = useMemo(() => {
+        if (exerciseLogs.length === 0) return 0;
+        return Math.max(...exerciseLogs.map(l => l.topWeight));
+      }, [exerciseLogs]);
+
+      const maxE1RMEver = useMemo(() => {
+        if (exerciseLogs.length === 0) return 0;
+        return Math.max(...exerciseLogs.map(l => l.bestE1RM));
+      }, [exerciseLogs]);
+
+      return (
+        <div className="space-y-5">
+          
+          {/* Action Bar: Add Historical Data */}
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-slate-200">History & Analysis</h2>
+            <button
+              onClick={() => setIsAddPastOpen(true)}
+              className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs px-3.5 py-2 rounded-lg shadow flex items-center space-x-1"
+            >
+              <span>+ Add Past Workout</span>
+            </button>
+          </div>
+
+          {/* Exercise Selector & Quick Stats */}
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+              Exercise Progress Chart:
+            </label>
+            <select
+              value={selectedHistoryExerciseId}
+              onChange={(e) => setSelectedHistoryExerciseId(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 text-slate-100 text-sm font-bold p-2.5 rounded-lg outline-none focus:border-emerald-500"
+            >
+              {exercises.map(ex => (
+                <option key={ex.id} value={ex.id}>{ex.name}</option>
+              ))}
+            </select>
+
+            <div className="grid grid-cols-2 gap-2 pt-1">
+              <div className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800">
+                <span className="text-[10px] text-slate-400 uppercase font-bold block">Best Weight</span>
+                <span className="text-base font-black font-mono text-emerald-400">{maxWeightEver} kg</span>
+              </div>
+              <div className="bg-slate-950/60 p-2.5 rounded-lg border border-slate-800">
+                <span className="text-[10px] text-slate-400 uppercase font-bold block">Estimated 1RM</span>
+                <span className="text-base font-black font-mono text-emerald-400">{maxE1RMEver} kg</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Trend SVG Chart */}
+          {exerciseLogs.length >= 2 && (
+            <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
+              <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Working Weight Progression (kg)</h3>
+              <div className="h-36 w-full pt-2">
+                <SimpleTrendChart logs={[...exerciseLogs].reverse()} />
+              </div>
+            </div>
+          )}
+
+          {/* Chronological History List */}
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">All Logged Sessions</h3>
+            
+            {history.length === 0 ? (
+              <p className="text-xs text-slate-500 italic py-3">No history logs found. Click "+ Add Past Workout" above to log your Sep 7-11 workouts!</p>
+            ) : (
+              <div className="space-y-3">
+                {history.map((log) => (
+                  <div key={log.id} className="bg-slate-950/70 border border-slate-800 rounded-lg p-3 space-y-2">
+                    <div className="flex justify-between items-center border-b border-slate-800/80 pb-1.5">
+                      <div>
+                        <span className="text-xs font-bold text-emerald-400 font-mono mr-2">{formatAusDate(log.date)}</span>
+                        <span className="text-[11px] text-slate-300">{log.dayName}</span>
+                      </div>
+                      <button 
+                        onClick={() => handleDeleteSession(log.id)}
+                        className="text-[10px] text-rose-400 hover:text-rose-300 px-2 py-0.5 rounded bg-rose-950/30 border border-rose-900/50"
+                      >
+                        Delete
+                      </button>
+                    </div>
+
+                    <div className="space-y-1.5 pt-1">
+                      {log.exercises.map((ex, exIdx) => (
+                        <div key={exIdx} className="text-xs font-mono text-slate-200">
+                          <p className="font-bold text-slate-300 text-[11px] font-sans">{ex.exerciseName}</p>
+                          <div className="flex flex-wrap gap-1.5 mt-0.5">
+                            {ex.sets.map((s, sIdx) => (
+                              <span key={sIdx} className="bg-slate-900 border border-slate-800 px-1.5 py-0.5 rounded text-[10px] text-emerald-300">
+                                Set {sIdx+1}: {s.weight}kg × {s.reps} @{s.rir}RIR
+                              </span>
+                            ))}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+
+          {/* ADD PAST WORKOUT MODAL */}
+          {isAddPastOpen && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 w-full max-w-md space-y-4 my-8 max-h-[90vh] overflow-y-auto">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-sm font-bold text-slate-100">Add Past Workout Log</h3>
+                  <button onClick={() => setIsAddPastOpen(false)} className="text-slate-400 text-sm">✕</button>
+                </div>
+
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Workout Date</label>
+                    <input 
+                      type="date"
+                      value={pastDate}
+                      onChange={(e) => setPastDate(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 mt-1"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Program Day</label>
+                      <select
+                        value={pastDayId}
+                        onChange={(e) => setPastDayId(e.target.value)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 mt-1"
+                      >
+                        {activeProgram.days.map(d => (
+                          <option key={d.id} value={d.id}>{d.shortName || d.name}</option>
+                        ))}
+                      </select>
+                    </div>
+
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-400 uppercase">Week #</label>
+                      <select
+                        value={pastWeek}
+                        onChange={(e) => setPastWeek(Number(e.target.value))}
+                        className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 mt-1"
+                      >
+                        {[1,2,3,4,5,6].map(w => (
+                          <option key={w} value={w}>Week {w}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {/* Exercises Sets Inputs */}
+                  <div className="space-y-3 pt-2">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase block">Log Exercise Performance:</span>
+                    {pastExercisesData.map((ex, exIdx) => (
+                      <div key={ex.exerciseId} className="bg-slate-950 p-2.5 rounded-lg border border-slate-800 space-y-2">
+                        <span className="text-xs font-bold text-slate-200">{ex.exerciseName}</span>
+                        <div className="space-y-1.5">
+                          {ex.sets.map((s, sIdx) => (
+                            <div key={sIdx} className="grid grid-cols-12 gap-1 items-center text-xs">
+                              <span className="col-span-3 text-[10px] text-slate-400">Set {sIdx+1}</span>
+                              <input 
+                                type="number" 
+                                placeholder="kg"
+                                value={s.weight}
+                                onChange={(e) => updatePastSet(exIdx, sIdx, 'weight', e.target.value)}
+                                className="col-span-3 bg-slate-900 border border-slate-700 text-center rounded p-1 text-slate-100"
+                              />
+                              <input 
+                                type="number" 
+                                placeholder="reps"
+                                value={s.reps}
+                                onChange={(e) => updatePastSet(exIdx, sIdx, 'reps', e.target.value)}
+                                className="col-span-3 bg-slate-900 border border-slate-700 text-center rounded p-1 text-slate-100"
+                              />
+                              <select
+                                value={s.rir}
+                                onChange={(e) => updatePastSet(exIdx, sIdx, 'rir', e.target.value)}
+                                className="col-span-3 bg-slate-900 border border-slate-700 text-center rounded p-1 text-slate-100 text-[11px]"
+                              >
+                                <option value="0">0 RIR</option>
+                                <option value="1">1 RIR</option>
+                                <option value="2">2 RIR</option>
+                                <option value="3">3 RIR</option>
+                                <option value="4">4 RIR</option>
+                              </select>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                <div className="flex space-x-2 justify-end pt-3 border-t border-slate-800">
+                  <button 
+                    onClick={() => setIsAddPastOpen(false)}
+                    className="bg-slate-800 text-slate-300 text-xs px-3 py-1.5 rounded"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleSavePastWorkout}
+                    className="bg-emerald-500 text-slate-950 font-bold text-xs px-4 py-1.5 rounded"
+                  >
+                    Save Historical Log
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    function SimpleTrendChart({ logs }) {
+      if (!logs || logs.length === 0) return null;
+
+      const weights = logs.map(l => l.topWeight);
+      const minW = Math.min(...weights) - 2;
+      const maxW = Math.max(...weights) + 2;
+      const range = (maxW - minW) || 1;
+
+      const width = 300;
+      const height = 100;
+
+      const points = logs.map((l, i) => {
+        const x = (i / (logs.length - 1 || 1)) * (width - 20) + 10;
+        const y = height - 15 - ((l.topWeight - minW) / range) * (height - 30);
+        return { x, y, weight: l.topWeight, date: formatShortAusDate(l.date) };
+      });
+
+      const pathString = points.reduce((acc, pt, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${pt.x} ${pt.y}`, '');
+
+      return (
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible">
+          <line x1="0" y1={height - 15} x2={width} y2={height - 15} stroke="#334155" strokeWidth="1" strokeDasharray="2" />
+          <path d={pathString} fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" />
+          {points.map((pt, i) => (
+            <g key={i}>
+              <circle cx={pt.x} cy={pt.y} r="4" fill="#22c55e" />
+              <text x={pt.x} y={pt.y - 8} textAnchor="middle" fill="#f1f5f9" fontSize="9" className="font-mono font-bold">
+                {pt.weight}k
+              </text>
+              <text x={pt.x} y={height - 2} textAnchor="middle" fill="#94a3b8" fontSize="8" className="font-mono">
+                {pt.date}
+              </text>
+            </g>
+          ))}
+        </svg>
+      );
+    }
+
+    // --- PROGRAM EDITOR VIEW ---
+    function ProgramEditorView({ 
+      programs, 
+      setPrograms, 
+      activeProgramId, 
+      setActiveProgramId, 
+      exercises,
+      currentWeek,
+      setCurrentWeek
+    }) {
+      const activeProgram = programs.find(p => p.id === activeProgramId) || programs[0];
+
+      return (
+        <div className="space-y-5">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+            <label className="text-xs font-bold text-slate-300 uppercase tracking-wider block">
+              Active Program Selection:
+            </label>
+            <select
+              value={activeProgramId}
+              onChange={(e) => setActiveProgramId(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 text-slate-100 text-sm font-bold p-2.5 rounded-lg outline-none focus:border-emerald-500"
+            >
+              {programs.map(p => (
+                <option key={p.id} value={p.id}>{p.name}</option>
+              ))}
+            </select>
+            <p className="text-xs text-slate-400">{activeProgram.description}</p>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+              6-Week Periodization Scheme
+            </h3>
+            <div className="space-y-2">
+              {Object.entries(WEEK_MODIFIERS).map(([wNum, meta]) => (
+                <div key={wNum} className={`p-2.5 rounded-lg border flex justify-between items-center text-xs ${
+                  Number(wNum) === currentWeek 
+                    ? 'bg-emerald-950/40 border-emerald-500/60 text-emerald-300' 
+                    : 'bg-slate-950/60 border-slate-800/80 text-slate-300'
+                }`}>
+                  <span className="font-bold font-mono">Week {wNum}: {meta.rir}</span>
+                  <span className="text-[11px] text-slate-400 italic">{meta.description}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-4">
+            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+              Program Workout Days & Exercises
+            </h3>
+
+            <div className="space-y-4">
+              {activeProgram.days.map((day) => (
+                <div key={day.id} className="bg-slate-950/80 border border-slate-800 rounded-lg p-3 space-y-2">
+                  <h4 className="text-xs font-bold text-emerald-400 border-b border-slate-800/80 pb-1.5">{day.name}</h4>
+                  
+                  <div className="space-y-1.5">
+                    {day.exercises.map((item, exIdx) => {
+                      const meta = exercises.find(e => e.id === item.exerciseId);
+                      return (
+                        <div key={exIdx} className="text-xs text-slate-200 flex justify-between items-center bg-slate-900/80 p-2 rounded border border-slate-800/60">
+                          <div>
+                            <span className="font-semibold">{meta ? meta.name : item.exerciseId}</span>
+                            {item.notes && <p className="text-[10px] text-slate-400">{item.notes}</p>}
+                          </div>
+                          <span className="font-mono text-[11px] text-emerald-400 bg-slate-950 px-2 py-0.5 rounded border border-slate-800">
+                            {item.defaultSets} × {item.minReps}–{item.maxReps} @{item.targetRir}RIR
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+
+        </div>
+      );
+    }
+
+    // --- EXERCISE LIBRARY VIEW ---
+    function ExerciseLibraryView({ 
+      exercises, 
+      setExercises, 
+      history, 
+      onSelectExercise,
+      onExport,
+      onImport
+    }) {
+      const [searchQuery, setSearchQuery] = useState('');
+      const [isModalOpen, setIsModalOpen] = useState(false);
+      const [newExName, setNewExName] = useState('');
+      const [newExCategory, setNewExCategory] = useState('Legs');
+      const [newExEquipment, setNewExEquipment] = useState('Barbell');
+
+      const filteredExercises = exercises.filter(e => 
+        e.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        e.equipment.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        e.category.toLowerCase().includes(searchQuery.toLowerCase())
+      );
+
+      const handleAddExercise = () => {
+        if (!newExName.trim()) return;
+        const newEx = {
+          id: 'ex_custom_' + Date.now(),
+          name: newExName.trim(),
+          category: newExCategory,
+          equipment: newExEquipment
+        };
+        setExercises(prev => [...prev, newEx]);
+        setNewExName('');
+        setIsModalOpen(false);
+      };
+
+      return (
+        <div className="space-y-4">
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3">
+            <div className="flex justify-between items-center">
+              <h2 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Home Gym Exercise Library</h2>
+              <button
+                onClick={() => setIsModalOpen(true)}
+                className="bg-emerald-500 hover:bg-emerald-600 text-slate-950 font-bold text-xs px-3 py-1.5 rounded-lg shadow"
+              >
+                + New Exercise
+              </button>
+            </div>
+
+            <input 
+              type="text"
+              placeholder="Search by exercise name, equipment (SSB, Cable...)..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full bg-slate-950 border border-slate-700 rounded-lg p-2.5 text-xs text-slate-100 placeholder-slate-500 focus:outline-none focus:border-emerald-500"
+            />
+          </div>
+
+          <div className="space-y-2">
+            {filteredExercises.map(ex => (
+              <div 
+                key={ex.id}
+                onClick={() => onSelectExercise(ex.id)}
+                className="bg-slate-900 hover:bg-slate-800/80 border border-slate-800 rounded-xl p-3 flex justify-between items-center cursor-pointer transition"
+              >
+                <div>
+                  <h3 className="text-xs font-bold text-slate-100">{ex.name}</h3>
+                  <div className="flex items-center space-x-2 mt-1">
+                    <span className="text-[10px] bg-slate-950 text-slate-400 px-2 py-0.5 rounded font-mono border border-slate-800">
+                      {ex.equipment}
+                    </span>
+                    <span className="text-[10px] text-emerald-400">{ex.category}</span>
+                  </div>
+                </div>
+                <span className="text-slate-500 text-sm">→</span>
+              </div>
+            ))}
+          </div>
+
+          <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-3 mt-8">
+            <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Data Backup & Export</h3>
+            <p className="text-xs text-slate-400">
+              Your data is automatically saved locally in your web browser. You can export a JSON backup to keep your training logs safe forever.
+            </p>
+            <div className="flex space-x-2 pt-1">
+              <button
+                onClick={onExport}
+                className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold px-3 py-2 rounded-lg"
+              >
+                Export Backup (JSON)
+              </button>
+              <label className="bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-bold px-3 py-2 rounded-lg cursor-pointer">
+                Import Backup
+                <input type="file" accept=".json" onChange={onImport} className="hidden" />
+              </label>
+            </div>
+          </div>
+
+          {isModalOpen && (
+            <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+              <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 w-full max-w-sm space-y-4">
+                <h3 className="text-sm font-bold text-slate-100">Add Custom Exercise</h3>
+                
+                <div className="space-y-3">
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Exercise Name</label>
+                    <input 
+                      type="text"
+                      placeholder="e.g. SSB Zercher Squat"
+                      value={newExName}
+                      onChange={(e) => setNewExName(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 mt-1"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Equipment</label>
+                    <input 
+                      type="text"
+                      placeholder="e.g. Safety Squat Bar / Cable"
+                      value={newExEquipment}
+                      onChange={(e) => setNewExEquipment(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 mt-1"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="text-[10px] font-bold text-slate-400 uppercase">Category</label>
+                    <select
+                      value={newExCategory}
+                      onChange={(e) => setNewExCategory(e.target.value)}
+                      className="w-full bg-slate-950 border border-slate-700 rounded p-2 text-xs text-slate-100 focus:outline-none focus:border-emerald-500 mt-1"
+                    >
+                      <option value="Legs">Legs</option>
+                      <option value="Chest">Chest</option>
+                      <option value="Back">Back</option>
+                      <option value="Delts">Delts</option>
+                      <option value="Biceps">Biceps</option>
+                      <option value="Triceps">Triceps</option>
+                      <option value="Posterior">Posterior</option>
+                      <option value="Calves">Calves</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex space-x-2 justify-end pt-2">
+                  <button 
+                    onClick={() => setIsModalOpen(false)}
+                    className="bg-slate-800 text-slate-300 text-xs px-3 py-1.5 rounded"
+                  >
+                    Cancel
+                  </button>
+                  <button 
+                    onClick={handleAddExercise}
+                    className="bg-emerald-500 text-slate-950 font-bold text-xs px-4 py-1.5 rounded"
+                  >
+                    Save
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+        </div>
+      );
+    }
+
+    const container = document.getElementById('root');
+    const root = ReactDOM.createRoot(container);
+    root.render(<App />);
+
+  </script>
+</body>
+</html>
