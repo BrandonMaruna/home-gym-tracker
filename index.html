@@ -1325,6 +1325,7 @@
       const [pastDayId, setPastDayId] = useState(activeProgram.days[0].id);
       const [pastWeek, setPastWeek] = useState(1);
       const [pastExercisesData, setPastExercisesData] = useState([]);
+      const [chartMetric, setChartMetric] = useState('weight');
 
       useEffect(() => {
         setPastDayId(activeProgram.days[0].id);
@@ -1503,9 +1504,25 @@
           {/* Trend SVG Chart */}
           {exerciseLogs.length >= 2 && (
             <div className="bg-slate-900 border border-slate-800 rounded-xl p-4 space-y-2">
-              <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">Working Weight Progression (kg)</h3>
+              <h3 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                {chartMetric === 'weight' ? 'Working Weight Progression (kg)' : 'Estimated 1RM Progression (kg)'}
+              </h3>
+              <div className="grid grid-cols-2 gap-1 rounded-lg bg-slate-950 p-1" role="group" aria-label="Progress chart metric">
+                <button
+                  type="button"
+                  aria-pressed={chartMetric === 'weight'}
+                  onClick={() => setChartMetric('weight')}
+                  className={`rounded-md px-2 py-2 text-xs font-semibold ${chartMetric === 'weight' ? 'bg-emerald-500 text-slate-950' : 'text-slate-300 hover:bg-slate-800'}`}
+                >Working weight</button>
+                <button
+                  type="button"
+                  aria-pressed={chartMetric === 'e1rm'}
+                  onClick={() => setChartMetric('e1rm')}
+                  className={`rounded-md px-2 py-2 text-xs font-semibold ${chartMetric === 'e1rm' ? 'bg-emerald-500 text-slate-950' : 'text-slate-300 hover:bg-slate-800'}`}
+                >Estimated 1RM</button>
+              </div>
               <div className="h-36 w-full pt-2">
-                <SimpleTrendChart logs={[...exerciseLogs].reverse()} />
+                <SimpleTrendChart logs={[...exerciseLogs].reverse()} metric={chartMetric} />
               </div>
             </div>
           )}
@@ -1671,12 +1688,13 @@
       );
     }
 
-    function SimpleTrendChart({ logs }) {
+    function SimpleTrendChart({ logs, metric = 'weight' }) {
       if (!logs || logs.length === 0) return null;
 
-      const weights = logs.map(l => l.topWeight);
-      const minW = Math.min(...weights) - 2;
-      const maxW = Math.max(...weights) + 2;
+      const metricKey = metric === 'e1rm' ? 'bestE1RM' : 'topWeight';
+      const values = logs.map(log => log[metricKey]);
+      const minW = Math.min(...values) - 2;
+      const maxW = Math.max(...values) + 2;
       const range = (maxW - minW) || 1;
 
       const width = 300;
@@ -1684,21 +1702,23 @@
 
       const points = logs.map((l, i) => {
         const x = (i / (logs.length - 1 || 1)) * (width - 20) + 10;
-        const y = height - 15 - ((l.topWeight - minW) / range) * (height - 30);
-        return { x, y, weight: l.topWeight, date: formatShortAusDate(l.date) };
+        const value = l[metricKey];
+        const y = height - 15 - ((value - minW) / range) * (height - 30);
+        return { x, y, value, date: formatShortAusDate(l.date) };
       });
 
       const pathString = points.reduce((acc, pt, i) => `${acc} ${i === 0 ? 'M' : 'L'} ${pt.x} ${pt.y}`, '');
 
       return (
-        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible">
+        <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-full overflow-visible" role="img" aria-label={`${metric === 'e1rm' ? 'Estimated 1RM' : 'Working weight'} progression chart in kilograms`}>
           <line x1="0" y1={height - 15} x2={width} y2={height - 15} stroke="#334155" strokeWidth="1" strokeDasharray="2" />
           <path d={pathString} fill="none" stroke="#22c55e" strokeWidth="2.5" strokeLinecap="round" />
           {points.map((pt, i) => (
             <g key={i}>
+              <title>{pt.date}: {pt.value} kg</title>
               <circle cx={pt.x} cy={pt.y} r="4" fill="#22c55e" />
               <text x={pt.x} y={pt.y - 8} textAnchor="middle" fill="#f1f5f9" fontSize="9" className="font-mono font-bold">
-                {pt.weight}k
+                {pt.value}
               </text>
               <text x={pt.x} y={height - 2} textAnchor="middle" fill="#94a3b8" fontSize="8" className="font-mono">
                 {pt.date}
